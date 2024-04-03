@@ -1,3 +1,5 @@
+
+
 import tqdm
 import random
 import pathlib
@@ -134,6 +136,61 @@ def download_from_zip(zip_url, to_dir, file_names):
             # and [-1] retrieves the last component, which is the file name itself.
             output_file = to_dir / class_name / fn  # same as the unzipped file path
             unzippped_file.rename(output_file)  # to move/rename the file
+
+
+def split_class_lists(files_for_class, count):
+    """ Returns the list of files that hasn't already been placed into a subset of data as well as the remainder of
+       files that need to be downloaded.
+
+       Args:
+         files_for_class: Files belonging to a particular class of data.
+         count: Number of files to download.
+
+       Returns:
+         Files belonging to the subset of data and dictionary of the remainder of files that need to be downloaded.
+     """
+    split_files = []
+    remainder = {}
+    for cls in files_for_class:
+        split_files.extend(files_for_class[cls][:count])
+        remainder[cls] = files_for_class[cls][count:]
+    return split_files, remainder
+
+
+def download_ucf_101_subset(zip_url, num_classes, splits, download_dir):
+    files = list_files_from_zip_url(zip_url)
+    for f in files:
+        path = os.path.normpath(f)
+        tokens = path.split(os.sep)
+        if len(tokens) <= 2:
+            files.remove(f) # removes the file from the list if it does not have a name
+        files_for_class = get_files_per_class(files)
+
+        classes = list(files_for_class.keys())[:num_classes]
+
+        for cls in classes:
+            random.shuffle(files_for_class)
+
+        # only ues the number of classes you want in the dictionary
+        files_for_class ={x: files_for_class[x] for x in classes}
+
+        dirs = {}
+        for split_name, split_count, in splits.items():
+            print(split_name, ":")
+            split_dir = download_dir / split_name
+            split_files, files_for_class = split_class_lists(files_for_class, split_count)
+            download_from_zip(zip_url, split_dir, split_files)
+            dirs[split_name] = split_dir
+
+        return dirs
+
+download_dir = pathlib.Path('/UCF101_subset')
+subset_paths = download_ucf_101_subset(URL,
+                                       num_classes=NUM_CLASSSES,
+                                       splits={"train": 30, "val": 10, "test": 10},
+                                       download_dir=download_dir)
+
+
 
 
 end_time = time.time()
