@@ -1,5 +1,3 @@
-
-
 import tqdm
 import random
 import pathlib
@@ -113,6 +111,7 @@ files_subset = select_subset_of_classes(files_for_class, classes[:NUM_CLASSSES],
 f_sub = list(files_subset.keys())
 print(f_sub)
 
+
 def download_from_zip(zip_url, to_dir, file_names):
     """ Download the contents of the zip file from the zip URL.
 
@@ -163,7 +162,7 @@ def download_ucf_101_subset(zip_url, num_classes, splits, download_dir):
         path = os.path.normpath(f)
         tokens = path.split(os.sep)
         if len(tokens) <= 2:
-            files.remove(f) # removes the file from the list if it does not have a name
+            files.remove(f)  # removes the file from the list if it does not have a name
         files_for_class = get_files_per_class(files)
 
         classes = list(files_for_class.keys())[:num_classes]
@@ -172,7 +171,7 @@ def download_ucf_101_subset(zip_url, num_classes, splits, download_dir):
             random.shuffle(files_for_class)
 
         # only ues the number of classes you want in the dictionary
-        files_for_class ={x: files_for_class[x] for x in classes}
+        files_for_class = {x: files_for_class[x] for x in classes}
 
         dirs = {}
         for split_name, split_count, in splits.items():
@@ -184,13 +183,81 @@ def download_ucf_101_subset(zip_url, num_classes, splits, download_dir):
 
         return dirs
 
+
 download_dir = pathlib.Path('/UCF101_subset')
+'''
 subset_paths = download_ucf_101_subset(URL,
                                        num_classes=NUM_CLASSSES,
                                        splits={"train": 30, "val": 10, "test": 10},
                                        download_dir=download_dir)
+'''
+
+video_count_train = len(list(download_dir.glob('train/*/*.avi')))
+video_count_test = len(list(download_dir.glob('test/*/*.avi')))
+video_count_val = len(list(download_dir.glob('val/*/*.avi')))
+video_total = video_count_test + video_count_train + video_count_val
+print(f"Total videos : {video_total}")
 
 
+def format_frames(frame, output_size):
+    """
+    Pad and resize an image from a video.
+
+    Args:
+        frame : Image that needs to be resized and padded.
+        output_size: Pixel size of the output frame image.
+
+    Return
+        Formatted frame with padding of specified output_size.
+    """
+    frame = tf.image.convert_image_dtype(frame, tf.float32)
+    frame = tf.image.resize_with_pad(frame, *output_size)
+    return frame
+
+
+def frames_from_video_file(video_path, n_frames, output_size=(224, 224), frame_step=15):
+    """
+    Creates frames from the video files.
+
+    Args:
+         video_path: File path to the video.
+         n_frames: Number of frames to be produced per video.
+         output_size: Pixel size of the output video image.
+    Return:
+        An numpy array of frames in shape of (n_frames, height, width, channels)
+    """
+    # Read each video frame by frame
+    result = []
+    src = cv2.VideoCapture(str(video_path))
+
+    video_length = src.get(cv2.CAP_PROP_FRAME_COUNT)
+
+    needed_length = 1 + (n_frames - 1) * frame_step
+
+    if needed_length > video_length:
+        start = 0
+    else:
+        max_start = video_length - needed_length
+        start = random.randint(0, max_start + 1)
+
+    src.set(cv2.CAP_PROP_POS_FRAMES, start)
+    # ret os a boolean indicating whether read was successful, frame is the image itself
+
+    ret, frame = src.read()
+    result.append(format_frames(frame, output_size))
+
+    for _ in range(n_frames - 1):
+        for _ in range(frame_step):
+            ret, frame = src.read()
+        if ret:
+            frame = format_frames(frame, output_size)
+            result.append(frame)
+        else:
+            result.append(np.zeros_like[0])
+    src.release()
+    result= np.array(result)[..., [2, 1, 0]]
+
+    return result
 
 
 end_time = time.time()
