@@ -185,12 +185,12 @@ def download_ucf_101_subset(zip_url, num_classes, splits, download_dir):
 
 
 download_dir = pathlib.Path('/UCF101_subset')
-'''
+
 subset_paths = download_ucf_101_subset(URL,
                                        num_classes=NUM_CLASSSES,
                                        splits={"train": 30, "val": 10, "test": 10},
                                        download_dir=download_dir)
-'''
+
 
 video_count_train = len(list(download_dir.glob('train/*/*.avi')))
 video_count_test = len(list(download_dir.glob('test/*/*.avi')))
@@ -259,6 +259,57 @@ def frames_from_video_file(video_path, n_frames, output_size=(224, 224), frame_s
 
     return result
 
+video_path = "End_of_a_jam.ogv"
+
+sample_video = frames_from_video_file(video_path, n_frames=10)
+sample_video.shape
+
+def to_gif(images):
+    converted_images = np.clip(images * 255, 0, 255).astype(np.uint8)
+    imageio.mimsave('./animation.gif', converted_images, fps=10)
+    return embed.embed_file('./animation.gif')
+
+to_gif(sample_video)
+
+class FrameGenerator:
+    def __int__(self, path, n_frames, training = False):
+        """ Returns a set of frames with their associated label.
+
+              Args:
+                path: Video file paths.
+                n_frames: Number of frames.
+                training: Boolean to determine if training dataset is being created.
+            """
+        self.path = path
+        self.n_frames = n_frames
+        self.training = training
+        self.class_names = sorted(set(p.name for p in self.path.iterdir() if p.is_dir()))
+        self.class_ids_for_name = dict((name, idx) for idx, name in enumerate(self.class_names))
+
+        def get_files_and_class_names(self):
+            video_paths= list(self.path.glob('*/*.avi'))
+            classes = [p.parent.name for p in video_paths]
+            return video_paths, classes
+
+        def __call__(self):
+            video_paths, classes = self.get_files_and_class_names()
+
+            pairs = list(zip(video_paths, classes))
+
+            if self.training:
+                random.shuffle(pairs)
+
+            for path, name in pairs:
+                video_frames = frames_from_video_file(path, self.n_frames)
+                label = self.class_ids_for_name[name] # encode labels
+                yield video_frames, label
+
+
+
+# docs-infra: no-execute
+
+ucf_sample_video = frames_from_video_file(next(subset_paths['train'].glob('*/*.avi')), 50)
+to_gif(ucf_sample_video)
 
 end_time = time.time()
 elapsed_time = end_time - start_time
