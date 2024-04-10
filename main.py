@@ -271,6 +271,11 @@ def to_gif(images):
 
 to_gif(sample_video)
 
+# docs-infra: no-execute
+
+ucf_sample_video = frames_from_video_file(next(subset_paths['train'].glob('*/*.avi')), 50)
+to_gif(ucf_sample_video)
+
 class FrameGenerator:
     def __int__(self, path, n_frames, training = False):
         """ Returns a set of frames with their associated label.
@@ -283,14 +288,18 @@ class FrameGenerator:
         self.path = path
         self.n_frames = n_frames
         self.training = training
+        # creates a list of class names based on the directory structure
         self.class_names = sorted(set(p.name for p in self.path.iterdir() if p.is_dir()))
+        # assigns unique ids tp each class name and stores them in a dictionary
         self.class_ids_for_name = dict((name, idx) for idx, name in enumerate(self.class_names))
 
+        # extracts video file paths and their class names
         def get_files_and_class_names(self):
             video_paths= list(self.path.glob('*/*.avi'))
             classes = [p.parent.name for p in video_paths]
             return video_paths, classes
 
+        # generates the frames
         def __call__(self):
             video_paths, classes = self.get_files_and_class_names()
 
@@ -304,12 +313,42 @@ class FrameGenerator:
                 label = self.class_ids_for_name[name] # encode labels
                 yield video_frames, label
 
+# testing out the frame generator
+fg = FrameGenerator(subset_paths['train'], 10 , training=True)
+
+frames, label = next(fg())
+
+print(f"shape: {frames.shape}")
+print(f"Label: {label}")
+
+# create a training set
+
+output_signature = (tf.TensorSpec( shape= (None, None, None, 3), dtype= tf.float32),
+                 tf.TensorSpec(shape= (), dtype= tf.int16))
+train_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_paths['train'], 10, training= True),
+                                          out_signature = output_signature)
+
+for frames,labels in train_ds.take(10):
+    print(labels)
+
+# create a validation set
+
+val_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_paths['val'], 10),
+                                        output_signature= output_signature)
+
+train_frames, train_labels = next(iter(train_ds))
+print(f'Shape of training set of frames: {train_frames.shape}')
+print(f'Shape of training labels: {train_labels.shape}')
+
+val_frames, val_labels = next(iter(val_ds))
+print(f'Shape of validation set of frames: {val_frames.shape}')
+print(f'Shape of validation labels: {val_labels.shape}')
 
 
-# docs-infra: no-execute
 
-ucf_sample_video = frames_from_video_file(next(subset_paths['train'].glob('*/*.avi')), 50)
-to_gif(ucf_sample_video)
+
+
+
 
 end_time = time.time()
 elapsed_time = end_time - start_time
