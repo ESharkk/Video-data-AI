@@ -128,13 +128,16 @@ def download_from_zip(zip_url, to_dir, file_names):
             # the file_names list.
             class_name = get_class(fn)
             zip.extract(fn, str(to_dir / class_name))
-            unzippped_file = to_dir / class_name / fn  # the path to the unzipped file
+            unzipped_file = to_dir / class_name / fn  # the path to the unzipped file
 
             fn = pathlib.Path(fn).parts[-1]
             # pathlib.Path(fn).parts returns a tuple containing the individual components of the file path,
             # and [-1] retrieves the last component, which is the file name itself.
             output_file = to_dir / class_name / fn  # same as the unzipped file path
-            unzippped_file.rename(output_file)  # to move/rename the file
+            if not output_file.exists():
+                unzipped_file.rename(output_file)  # Rename the file
+            else:
+                os.remove(unzipped_file)  # to move/rename the file
 
 
 def split_class_lists(files_for_class, count):
@@ -253,7 +256,7 @@ def frames_from_video_file(video_path, n_frames, output_size=(224, 224), frame_s
             frame = format_frames(frame, output_size)
             result.append(frame)
         else:
-            result.append(np.zeros_like[0])
+            result.append(np.zeros_like(frame))
     src.release()
     result= np.array(result)[..., [2, 1, 0]]
 
