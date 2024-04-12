@@ -256,9 +256,9 @@ def frames_from_video_file(video_path, n_frames, output_size=(224, 224), frame_s
             frame = format_frames(frame, output_size)
             result.append(frame)
         else:
-            result.append(np.zeros_like(frame))
+            result.append(np.zeros((output_size[0], output_size[1], 3), dtype=np.uint8))
     src.release()
-    result= np.array(result)[..., [2, 1, 0]]
+    result= np.array(result)
 
     return result
 
@@ -280,7 +280,7 @@ ucf_sample_video = frames_from_video_file(next(subset_paths['train'].glob('*/*.a
 to_gif(ucf_sample_video)
 
 class FrameGenerator:
-    def __int__(self, path, n_frames, training = False):
+    def __init__(self, path, n_frames, training = False):
         """ Returns a set of frames with their associated label.
 
               Args:
@@ -346,11 +346,6 @@ print(f'Shape of training labels: {train_labels.shape}')
 val_frames, val_labels = next(iter(val_ds))
 print(f'Shape of validation set of frames: {val_frames.shape}')
 print(f'Shape of validation labels: {val_labels.shape}')
-
-
-
-
-
 
 
 end_time = time.time()
