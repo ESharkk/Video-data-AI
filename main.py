@@ -17,6 +17,8 @@ import time
 import imageio
 from IPython import display
 from urllib import request
+
+from tensorflow.python.data import AUTOTUNE
 from tensorflow_docs.vis import embed
 
 start_time = time.time()
@@ -194,7 +196,6 @@ subset_paths = download_ucf_101_subset(URL,
                                        splits={"train": 30, "val": 10, "test": 10},
                                        download_dir=download_dir)
 
-
 video_count_train = len(list(download_dir.glob('train/*/*.avi')))
 video_count_test = len(list(download_dir.glob('test/*/*.avi')))
 video_count_val = len(list(download_dir.glob('val/*/*.avi')))
@@ -258,19 +259,22 @@ def frames_from_video_file(video_path, n_frames, output_size=(224, 224), frame_s
         else:
             result.append(np.zeros((output_size[0], output_size[1], 3), dtype=np.uint8))
     src.release()
-    result= np.array(result)
+    result = np.array(result)
 
     return result
+
 
 video_path = "End_of_a_jam.ogv"
 
 sample_video = frames_from_video_file(video_path, n_frames=10)
 sample_video.shape
 
+
 def to_gif(images):
     converted_images = np.clip(images * 255, 0, 255).astype(np.uint8)
     imageio.mimsave('./animation.gif', converted_images, fps=10)
     return embed.embed_file('./animation.gif')
+
 
 to_gif(sample_video)
 
@@ -279,8 +283,9 @@ to_gif(sample_video)
 ucf_sample_video = frames_from_video_file(next(subset_paths['train'].glob('*/*.avi')), 50)
 to_gif(ucf_sample_video)
 
+
 class FrameGenerator:
-    def __init__(self, path, n_frames, training = False):
+    def __init__(self, path, n_frames, training=False):
         """ Returns a set of frames with their associated label.
 
               Args:
@@ -297,27 +302,28 @@ class FrameGenerator:
         self.class_ids_for_name = dict((name, idx) for idx, name in enumerate(self.class_names))
 
         # extracts video file paths and their class names
-        def get_files_and_class_names(self):
-            video_paths= list(self.path.glob('*/*.avi'))
-            classes = [p.parent.name for p in video_paths]
-            return video_paths, classes
+    def get_files_and_class_names(self):
+        video_paths = list(self.path.glob('*/*.avi'))
+        classes = [p.parent.name for p in video_paths]
+        return video_paths, classes
 
         # generates the frames
-        def __call__(self):
-            video_paths, classes = self.get_files_and_class_names()
+    def __call__(self):
+        video_paths, classes = self.get_files_and_class_names()
 
-            pairs = list(zip(video_paths, classes))
+        pairs = list(zip(video_paths, classes))
 
-            if self.training:
-                random.shuffle(pairs)
+        if self.training:
+            random.shuffle(pairs)
 
-            for path, name in pairs:
-                video_frames = frames_from_video_file(path, self.n_frames)
-                label = self.class_ids_for_name[name] # encode labels
-                yield video_frames, label
+        for path, name in pairs:
+            video_frames = frames_from_video_file(path, self.n_frames)
+            label = self.class_ids_for_name[name]  # encode labels
+            yield video_frames, label
+
 
 # testing out the frame generator
-fg = FrameGenerator(subset_paths['train'], 10 , training=True)
+fg = FrameGenerator(subset_paths['train'], 10, training=True)
 
 frames, label = next(fg())
 
@@ -326,18 +332,18 @@ print(f"Label: {label}")
 
 # create a training set
 
-output_signature = (tf.TensorSpec( shape= (None, None, None, 3), dtype= tf.float32),
-                 tf.TensorSpec(shape= (), dtype= tf.int16))
-train_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_paths['train'], 10, training= True),
-                                          out_signature = output_signature)
+output_signature = (tf.TensorSpec(shape=(None, None, None, 3), dtype=tf.float32),
+                    tf.TensorSpec(shape=(), dtype=tf.int16))
+train_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_paths['train'], 10, training=True),
+                                          output_signature=output_signature)
 
-for frames,labels in train_ds.take(10):
+for frames, labels in train_ds.take(10):
     print(labels)
 
 # create a validation set
 
 val_ds = tf.data.Dataset.from_generator(FrameGenerator(subset_paths['val'], 10),
-                                        output_signature= output_signature)
+                                        output_signature=output_signature)
 
 train_frames, train_labels = next(iter(train_ds))
 print(f'Shape of training set of frames: {train_frames.shape}')
@@ -347,6 +353,44 @@ val_frames, val_labels = next(iter(val_ds))
 print(f'Shape of validation set of frames: {val_frames.shape}')
 print(f'Shape of validation labels: {val_labels.shape}')
 
+AUTOTUNE = tf.data.AUTOTUNE
+
+train_ds = train_ds.cache().shuffle(1000).prefetch(buffer_size=AUTOTUNE)
+val_ds = val_ds.cache().shuffle(1000).prefetch(buffer_size=AUTOTUNE)
+
+train_ds = train_ds.batch(2)
+val_ds = val_ds.batch(2)
+
+# video training is done with a five dimensional object containing: [batch_size, num_of_frames, height, width, channels]
+# whereas the image training is done with four dimension: [batch_size, height, width, channels]
+
+train_frames, train_labels = next(iter(train_ds))
+print(f'Shape of training set of frames is: {train_frames.shape}')
+print(f'Shape of training labels is: {train_labels.shape}')
+
+val_frames, val_labels = next(iter(val_ds))
+print(f'Shape of validation set of frames is: {val_frames.shape}')
+print(f'Shape of validation labels is: {val_labels.shape}')
+
+net = tf.keras.applications.EfficientNetB0(include_top=False)
+net.trainable = False
+
+model = tf.keras.Sequential([
+    tf.keras.layers.Rescaling(scale=255),
+    tf.keras.layers.TimeDistributed(net),
+    tf.keras.layers.Dense(10),
+    tf.keras.layers.GlobalAveragePooling3D()
+])
+
+model.compile(optimizer='adam',
+              loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits = True),
+              metrics=['accuracy'])
+
+model.fit(train_ds,
+          epochs=10,
+          validation_data=val_ds,
+          callbacks= tf.keras.callbacks.EarlyStopping(patience=2, monitor='val_loss')
+          )
 
 end_time = time.time()
 elapsed_time = end_time - start_time
